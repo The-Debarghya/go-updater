@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 import argparse
+import requests
 import subprocess
 
-ENDPOINT = "https://go.dev/dl/?mode=json&include=all"
+from rich.console import Console
+import time
+
+
+BASE_URL = "https://go.dev/dl/"
 
 def get_current_version() -> str:
     version = subprocess.run(['go', 'version'], capture_output=True).stdout.decode('utf-8').split(' ')[2]
@@ -14,8 +19,24 @@ def verify_version(version: str) -> bool:
         return version != get_current_version()
     return True
 
+def get_available_versions() -> list:
+    console = Console()
+    with console.status("[bold green]Fetching available versions...") as status:
+        try:
+            status.start()
+            archives_data = requests.get(BASE_URL + "?mode=json&include=all").json()
+            versions = [(archive['version'], archive['stable']) for archive in archives_data]
+            time.sleep(0.3)
+            status.update()
+            return versions
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            return None
+        finally:
+            status.stop()
+
 def download_new_archive(version: str, arch: str, os: str):
-    pass
+    archives_data = requests.get(BASE_URL + "?mode=json&include=all").json()
     
 def remove_old_version():
     pass
@@ -29,13 +50,14 @@ def update_symlinks(version: str):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Update go version')
-    parser.add_argument('-v', '--version', help='Update to version', required=True)
+    parser.add_argument('-v', '--version', help='Update to version')
     parser.add_argument('-a', '--arch', help='Update for arch [Default AMD64]', default='amd64', choices=['amd64', 'arm64', '386', 'armv6l', 'ppc64le', 's390x'])
     parser.add_argument('-o', '--os', help='Update for os [Default Linux]', default='linux', choices=['linux', 'darwin', 'windows', 'freebsd'])
     parser.add_argument('--download-only', help='Download archive only', action='store_true')
     parser.add_argument('--unpack-only', help='Unpack downloaded archive only', action='store_true')
     parser.add_argument('--file', help='Path to downloaded archive')
     parser.add_argument('--remove-only', help='Remove old installation only', action='store_true')
+    parser.add_argument('--available-versions', help='Show available versions', action='store_true')
     #parser.add_argument('-d', '--debug', help='Debug mode', action='store_true')
     version = get_current_version()
     parser.add_argument('-c', '--current', help='Get current version status', action='version', version=version)
@@ -45,6 +67,14 @@ if __name__ == '__main__':
         print(f'Already on version {args.version}')
         exit(0)
 
+    if args.available_versions:
+        print('VERSION\t\tSTABLE')
+        available_versions = get_available_versions()
+        max_len = max([len(version) for version, _ in available_versions])
+        for version, stable in available_versions:
+            print(f'{version.ljust(max_len)}\t{"YES" if stable else "NO"}')
+        exit(0)
+
     if args.download_only:
         download_new_archive(args.version, args.arch, args.os)
         exit(0)
@@ -52,7 +82,6 @@ if __name__ == '__main__':
     if args.unpack_only:
         if not args.file:
             parser.error('--unpack-only requires --file [ARCHIVE]')
-
         unpack_archive(args.version, args.arch, args.os)
         exit(0)
 
