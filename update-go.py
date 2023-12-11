@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
+import os
 import argparse
+import hashlib
 import requests
 import subprocess
 
 from rich.console import Console
+from rich.progress import Progress
 import time
 
 
@@ -35,13 +38,53 @@ def get_available_versions() -> list:
         finally:
             status.stop()
 
-def download_new_archive(version: str, arch: str, os: str):
-    archives_data = requests.get(BASE_URL + "?mode=json&include=all").json()
+def download_new_archive(version: str, arch: str, os: str) -> str:
+    console = Console()
+    with console.status("[bold green]Checking for specified version...") as status:
+        status.start()
+        archives_data = requests.get(BASE_URL + "?mode=json&include=all").json()
+        for archive in archives_data:
+            if archive['version'] == version:
+                files = archive['files']
+                break
+        for file in files:
+            if file['os'] == os and file['arch'] == arch and file['version'] == version:
+                filename = file['filename']
+                filehash = file['sha256']
+                file_size = file['size']
+                break
+        status.update()
+        time.sleep(0.1)
+        status.stop()    
+    
+    with requests.get(BASE_URL + filename, stream=True) as r:
+        r.raise_for_status()
+        progress = Progress()
+        with Progress() as progress:
+            task = progress.add_task(f"[cyan]Downloading {filename}...", total=file_size, start=True)
+            with open(filename, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    progress.update(task, advance=len(chunk))
+            progress.stop()
+
+    with console.status("[bold green]Verifying file hash...") as status:
+        status.start()
+        with open(filename, 'rb') as f:
+            filehash_calculated = hashlib.sha256(f.read()).hexdigest()
+        status.update()
+        time.sleep(0.1)
+        if filehash != filehash_calculated:
+            raise Exception('File was tampered while downloading!')
+        status.stop()
+        
+    return filename        
+    
     
 def remove_old_version():
     pass
 
-def unpack_archive(version: str, arch: str, os: str):
+def unpack_archive(archive_path: str):
     pass
 
 def update_symlinks(version: str):
@@ -52,7 +95,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Update go version')
     parser.add_argument('-v', '--version', help='Update to version')
     parser.add_argument('-a', '--arch', help='Update for arch [Default AMD64]', default='amd64', choices=['amd64', 'arm64', '386', 'armv6l', 'ppc64le', 's390x'])
-    parser.add_argument('-o', '--os', help='Update for os [Default Linux]', default='linux', choices=['linux', 'darwin', 'windows', 'freebsd'])
+    parser.add_argument('-o', '--os', help='Update for os [Default Linux]', default='linux', choices=['linux', 'darwin', 'windows', 'freebsd', 'aix'])
     parser.add_argument('--download-only', help='Download archive only', action='store_true')
     parser.add_argument('--unpack-only', help='Unpack downloaded archive only', action='store_true')
     parser.add_argument('--file', help='Path to downloaded archive')
@@ -76,13 +119,18 @@ if __name__ == '__main__':
         exit(0)
 
     if args.download_only:
-        download_new_archive(args.version, args.arch, args.os)
-        exit(0)
+        try:
+            downloaded_archive = download_new_archive(args.version, args.arch, args.os)
+            print(f'Archive downloaded to {os.getcwd() + "/" + downloaded_archive}')
+            exit(0)
+        except Exception as e:
+            print(f'Error: {e.__str__()}')
+            exit(1)
 
     if args.unpack_only:
         if not args.file:
             parser.error('--unpack-only requires --file [ARCHIVE]')
-        unpack_archive(args.version, args.arch, args.os)
+        unpack_archive(args.file)
         exit(0)
 
     if args.remove_only:
@@ -95,8 +143,9 @@ if __name__ == '__main__':
             exit(0)
         
 
-    download_new_archive(args.version, args.arch, args.os)
+    downloaded_archive = download_new_archive(args.version, args.arch, args.os)
+    print(f'Archive downloaded to {os.getcwd() + "/" + downloaded_archive}')
     remove_old_version()
-    unpack_archive(args.version, args.arch, args.os)
+    unpack_archive(downloaded_archive)
     update_symlinks(args.version)
     
