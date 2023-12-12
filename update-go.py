@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import requests
 import subprocess
+import tarfile
 
 from rich.console import Console
 from rich.progress import Progress
@@ -11,6 +12,7 @@ import time
 
 
 BASE_URL = "https://go.dev/dl/"
+DEFAULT_INSTALLATION_DIR = "/usr/local/go"
 
 def get_current_version() -> str:
     version = subprocess.run(['go', 'version'], capture_output=True).stdout.decode('utf-8').split(' ')[2]
@@ -80,14 +82,41 @@ def download_new_archive(version: str, arch: str, os: str) -> str:
         
     return filename        
     
-    
 def remove_old_version():
-    pass
+    dir_to_remove = DEFAULT_INSTALLATION_DIR
+    prompt = input(f'Is your old installation at {DEFAULT_INSTALLATION_DIR}? [y/N]: ')
+    if not prompt.lower() in ['y', 'yes']:
+        dir_to_remove = input('Enter path to old installation: ')
+    print(f'WARNING: The following directory and contents will be removed: {dir_to_remove}...')
+    prompt = input('Proceed further? [y/N]: ')
+    if not os.path.exists(dir_to_remove):
+        raise Exception(f'Specified directory({dir_to_remove}) does not exist!')
+    if not prompt.lower() in ['y', 'yes']:
+        return
+    if os.geteuid() != 0:
+        process = subprocess.run(['bash', '-c', f'sudo rm -rf {dir_to_remove}'], capture_output=True, check=True)
+        subprocess.run(['bash', '-c', 'sudo -k'], shell=True, capture_output=True, check=True)          
+        if process.returncode != 0:
+            raise Exception('Unable to remove old installation')
+    else:
+        process = subprocess.run(['bash', '-c', f'rm -rf {dir_to_remove}'], capture_output=True, check=True)
+        if process.returncode != 0:
+            raise Exception('Unable to remove old installation')
+    print('Old installation removed!!!')
+    
 
 def unpack_archive(archive_path: str):
-    pass
+    with Progress() as progress:
+        with tarfile.open(archive_path, "r:gz") as tar:
+            total_files = len(tar.getmembers())
+            for member in progress.track(tar.getmembers(), total=total_files, description=f"[cyan]Unpacking {archive_path}..."):
+                tar.extractall(path=os.getcwd(), members=[member])
+    print(f'Archive unpacked to {os.getcwd() + "/go/"}')
 
 def update_symlinks(version: str):
+    pass
+
+def cleanup():
     pass
 
 
@@ -142,10 +171,14 @@ if __name__ == '__main__':
         finally:
             exit(0)
         
-
-    downloaded_archive = download_new_archive(args.version, args.arch, args.os)
-    print(f'Archive downloaded to {os.getcwd() + "/" + downloaded_archive}')
-    remove_old_version()
-    unpack_archive(downloaded_archive)
-    update_symlinks(args.version)
+    try:
+        downloaded_archive = download_new_archive(args.version, args.arch, args.os)
+        print(f'Archive downloaded to {os.getcwd() + "/" + downloaded_archive}')
+        remove_old_version()
+        unpack_archive(downloaded_archive)
+        update_symlinks(args.version)
+        cleanup()
+    except Exception as e:
+        print(f'Error: {e.__str__()}')
+        exit(1)
     
