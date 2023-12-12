@@ -82,7 +82,7 @@ def download_new_archive(version: str, arch: str, os: str) -> str:
         
     return filename        
     
-def remove_old_version():
+def remove_old_version() -> str:
     dir_to_remove = DEFAULT_INSTALLATION_DIR
     prompt = input(f'Is your old installation at {DEFAULT_INSTALLATION_DIR}? [y/N]: ')
     if not prompt.lower() in ['y', 'yes']:
@@ -94,8 +94,7 @@ def remove_old_version():
     if not prompt.lower() in ['y', 'yes']:
         return
     if os.geteuid() != 0:
-        process = subprocess.run(['bash', '-c', f'sudo rm -rf {dir_to_remove}'], capture_output=True, check=True)
-        subprocess.run(['bash', '-c', 'sudo -k'], shell=True, capture_output=True, check=True)          
+        process = subprocess.run(['bash', '-c', f'sudo rm -rf {dir_to_remove}'], capture_output=True, check=True)          
         if process.returncode != 0:
             raise Exception('Unable to remove old installation')
     else:
@@ -103,8 +102,8 @@ def remove_old_version():
         if process.returncode != 0:
             raise Exception('Unable to remove old installation')
     print('Old installation removed!!!')
+    return dir_to_remove
     
-
 def unpack_archive(archive_path: str):
     with Progress() as progress:
         with tarfile.open(archive_path, "r:gz") as tar:
@@ -113,11 +112,49 @@ def unpack_archive(archive_path: str):
                 tar.extractall(path=os.getcwd(), members=[member])
     print(f'Archive unpacked to {os.getcwd() + "/go/"}')
 
-def update_symlinks(version: str):
-    pass
+def update_symlinks(installation_dir: str):
+    # remove old symlinks
+    print('Removing old symlinks...')
+    if os.geteuid() != 0:
+        process = subprocess.run(['bash', '-c', 'sudo rm /usr/bin/go /usr/bin/gofmt'], capture_output=True, check=True)          
+        if process.returncode != 0:
+            raise Exception('Unable to remove old symlink')
+    else:
+        process = subprocess.run(['bash', '-c', 'rm /usr/bin/go /usr/bin/gofmt'], capture_output=True, check=True)
+        if process.returncode != 0:
+            raise Exception('Unable to remove old symlink')
+    # copy unpacked files to installation dir
+    print('Copying unpacked files to installation directory...')
+    if os.geteuid() != 0:
+        subprocess.run(['bash', '-c', f'sudo mkdir -p {installation_dir}'], capture_output=True, check=True)
+        process = subprocess.run(['bash', '-c', f'sudo cp -r go/* {installation_dir}'], capture_output=True, check=True)          
+        if process.returncode != 0:
+            raise Exception('Unable to copy unpacked files to installation directory')
+    else:
+        subprocess.run(['bash', '-c', f'mkdir -p {installation_dir}'], capture_output=True, check=True)
+        process = subprocess.run(['bash', '-c', f'cp -r go/* {installation_dir}'], capture_output=True, check=True)
+        if process.returncode != 0:
+            raise Exception('Unable to copy unpacked files to installation directory')
+    # create new symlinks
+    print('Creating new symlinks...')
+    if os.geteuid() != 0:
+        process1 = subprocess.run(['bash', '-c', f'sudo ln -s {installation_dir}/bin/go /usr/bin/go'], capture_output=True, check=True)          
+        process2 = subprocess.run(['bash', '-c', f'sudo ln -s {installation_dir}/bin/gofmt /usr/bin/gofmt'], capture_output=True, check=True)          
+        if process1.returncode != 0 or process2.returncode != 0:
+            raise Exception('Unable to create new symlink')
+    else:
+        process1 = subprocess.run(['bash', '-c', f'ln -s {installation_dir}/bin/go /usr/bin/go'], capture_output=True, check=True)
+        process2 = subprocess.run(['bash', '-c', f'ln -s {installation_dir}/bin/gofmt /usr/bin/gofmt'], capture_output=True, check=True)
+        if process1.returncode != 0 or process2.returncode != 0:
+            raise Exception('Unable to create new symlink')
 
-def cleanup():
-    pass
+def cleanup(downloaded_archive: str):
+    # remove downloaded archive
+    print('Removing downloaded archive...')
+    subprocess.run(['bash', '-c', f'rm {downloaded_archive}'], shell=True, capture_output=True, check=True)
+    # remove unpacked files
+    print('Removing unpacked files...')
+    subprocess.run(['bash', '-c', 'rm -rf go/'], shell=True, capture_output=True, check=True)
 
 
 if __name__ == '__main__':
@@ -169,15 +206,18 @@ if __name__ == '__main__':
             print('Unable to remove old version')
             exit(1)
         finally:
+            subprocess.run(['bash', '-c', 'sudo -k'], shell=True, capture_output=True, check=True)
             exit(0)
         
     try:
         downloaded_archive = download_new_archive(args.version, args.arch, args.os)
         print(f'Archive downloaded to {os.getcwd() + "/" + downloaded_archive}')
-        remove_old_version()
+        installation_dir = remove_old_version()
         unpack_archive(downloaded_archive)
-        update_symlinks(args.version)
-        cleanup()
+        update_symlinks(installation_dir)
+        subprocess.run(['bash', '-c', 'sudo -k'], shell=True, capture_output=True, check=True)
+        print("Cleaning up...")
+        cleanup(downloaded_archive)
     except Exception as e:
         print(f'Error: {e.__str__()}')
         exit(1)
