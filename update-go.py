@@ -18,6 +18,16 @@ def get_current_version() -> str:
     version = subprocess.run(['go', 'version'], capture_output=True).stdout.decode('utf-8').split(' ')[2]
     return version
 
+def compare_versions(version1: str, version2: str) -> int:
+    version1 = version1.replace('go', '').split('.')
+    version2 = version2.replace('go', '').split('.')
+    for i in range(len(version1)):
+        if int(version1[i]) > int(version2[i]):
+            return 1
+        elif int(version1[i]) < int(version2[i]):
+            return -1
+    return 0
+
 def verify_version(version: str) -> bool:
     go_exists = subprocess.run(['go', 'version'], capture_output=True).returncode == 0
     if go_exists:
@@ -31,6 +41,28 @@ def get_available_versions() -> list:
             status.start()
             archives_data = requests.get(BASE_URL + "?mode=json&include=all").json()
             versions = [(archive['version'], archive['stable']) for archive in archives_data]
+            time.sleep(0.3)
+            status.update()
+            return versions
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            return None
+        finally:
+            status.stop()
+
+def check_for_updates(current_version: str) -> tuple:
+    console = Console()
+    with console.status("[bold green]Fetching available versions...") as status:
+        try:
+            status.start()
+            archives_data = requests.get(BASE_URL + "?mode=json").json()
+            versions = ()
+            for archive in archives_data:
+                if archive['stable']:
+                    comp = compare_versions(current_version, archive['version'])
+                    if comp == -1:
+                        versions = (archive['version'], archive['stable'])
+                        break
             time.sleep(0.3)
             status.update()
             return versions
@@ -167,6 +199,7 @@ if __name__ == '__main__':
     parser.add_argument('--file', help='Path to downloaded archive')
     parser.add_argument('--remove-only', help='Remove old installation only', action='store_true')
     parser.add_argument('--available-versions', help='Show available versions', action='store_true')
+    parser.add_argument('--check', help='Check for new updates', action='store_true')
     #parser.add_argument('-d', '--debug', help='Debug mode', action='store_true')
     version = get_current_version()
     parser.add_argument('-c', '--current', help='Get current version status', action='version', version=version)
@@ -182,6 +215,15 @@ if __name__ == '__main__':
         max_len = max([len(version) for version, _ in available_versions])
         for version, stable in available_versions:
             print(f'{version.ljust(max_len)}\t{"YES" if stable else "NO"}')
+        exit(0)
+
+    if args.check:
+        versions = check_for_updates(version)
+        if versions is None or len(versions) == 0:
+            print('No updates available!')
+            exit(1)
+        print("Updates available!!!")
+        print(f'Version: {versions[0]} | Stable Release: {versions[1]}')
         exit(0)
 
     if args.download_only:

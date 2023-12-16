@@ -25,6 +25,7 @@ options:
   --file FILE           Path to downloaded archive
   --remove-only         Remove old installation only
   --available-versions  Show available versions
+  --check               Check for new updates
   -c, --current         Get current version status
 ```
 
