@@ -183,10 +183,14 @@ def update_symlinks(installation_dir: str):
 def cleanup(downloaded_archive: str):
     # remove downloaded archive
     print('Removing downloaded archive...')
-    subprocess.run(['bash', '-c', f'rm {downloaded_archive}'], shell=True, capture_output=True, check=True)
+    process1 = subprocess.run(['bash', '-c', f'rm {downloaded_archive}'], shell=True, capture_output=True, check=True)
+    if process1.returncode != 0:
+        raise Exception(f'Unable to remove {downloaded_archive}')
     # remove unpacked files
     print('Removing unpacked files...')
-    subprocess.run(['bash', '-c', 'rm -rf go/'], shell=True, capture_output=True, check=True)
+    process2 = subprocess.run(['bash', '-c', 'rm -rf go/'], shell=True, capture_output=True, check=True)
+    if process2.returncode != 0:
+        raise Exception('Unable to finish cleanup!')
 
 
 if __name__ == '__main__':
@@ -257,7 +261,9 @@ if __name__ == '__main__':
         installation_dir = remove_old_version()
         unpack_archive(downloaded_archive)
         update_symlinks(installation_dir)
-        subprocess.run(['bash', '-c', 'sudo -k'], shell=True, capture_output=True, check=True)
+        proc = subprocess.run(['bash', '-c', 'sudo -k'], shell=True, capture_output=True, check=True)
+        if proc.returncode != 0:
+            raise Exception("An error occurred while dropping privileges!")
         print("Cleaning up...")
         cleanup(downloaded_archive)
     except Exception as e:
