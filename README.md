@@ -29,5 +29,11 @@ options:
   -c, --current         Get current version status
 ```
 
+- Installation:
+  ```bash
+  git clone https://github.com/The-Debarghya/go-updater
+  pip3 install -r requirements.txt
+  ```
+
 - You can use it to only download the archive, or unpack already downloaded archive, or even remove the old installation only.(If you're skeptical about what is happening internally!)
 
