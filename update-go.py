@@ -261,7 +261,7 @@ if __name__ == '__main__':
         installation_dir = remove_old_version()
         unpack_archive(downloaded_archive)
         update_symlinks(installation_dir)
-        proc = subprocess.run(['bash', '-c', 'sudo -k'], shell=True, capture_output=True, check=True)
+        proc = subprocess.run(['bash', '-c', 'sudo -k'], check=True)
         if proc.returncode != 0:
             raise Exception("An error occurred while dropping privileges!")
         print("Cleaning up...")
