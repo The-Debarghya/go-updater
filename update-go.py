@@ -183,12 +183,12 @@ def update_symlinks(installation_dir: str):
 def cleanup(downloaded_archive: str):
     # remove downloaded archive
     print('Removing downloaded archive...')
-    process1 = subprocess.run(['bash', '-c', f'rm {downloaded_archive}'], shell=True, capture_output=True, check=True)
+    process1 = subprocess.run(['bash', '-c', f'rm {downloaded_archive}'], capture_output=True, check=True)
     if process1.returncode != 0:
         raise Exception(f'Unable to remove {downloaded_archive}')
     # remove unpacked files
     print('Removing unpacked files...')
-    process2 = subprocess.run(['bash', '-c', 'rm -rf go/'], shell=True, capture_output=True, check=True)
+    process2 = subprocess.run(['bash', '-c', 'rm -rf go/'], capture_output=True, check=True)
     if process2.returncode != 0:
         raise Exception('Unable to finish cleanup!')
 
@@ -252,7 +252,7 @@ if __name__ == '__main__':
             print('Unable to remove old version')
             exit(1)
         finally:
-            subprocess.run(['bash', '-c', 'sudo -k'], shell=True, capture_output=True, check=True)
+            subprocess.run(['bash', '-c', 'sudo -k'], capture_output=True, check=True)
             exit(0)
         
     try:
